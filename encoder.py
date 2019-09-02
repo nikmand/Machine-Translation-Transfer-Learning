@@ -13,7 +13,7 @@ MODEL_CACHE = '.embeddings'
 
 class MTLSTM(nn.Module):
 
-    def __init__(self, n_vocab=None, vectors=None, residual_embeddings=False, model_cache=MODEL_CACHE):
+    def  __init__(self, n_vocab=None, vectors=None, residual_embeddings=False, model_cache=MODEL_CACHE):
         """
         Arguments:
             n_vocab (int): If not None, initialize MTLSTM with an embedding matrix with n_vocab vectors
@@ -64,7 +64,7 @@ class MTLSTM(nn.Module):
         unpacked_outputs0 = unpack(outputs0, batch_first=True)[0]
         _, _indices = torch.sort(indices, 0)
         unpacked_outputs0 = unpacked_outputs0[_indices]
-        outputs.append(unpacked_outputs0)
+        # outputs.append(unpacked_outputs0)
         packed_inputs = outputs0
 
         outputs1, hidden_t1 = self.rnn1(packed_inputs, hidden)
