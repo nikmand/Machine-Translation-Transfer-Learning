@@ -16,6 +16,11 @@ class BCN(nn.Module):
     Learned in Translation: Contextualized Word Vectors (NIPS 2017)
     for text classification"""
 
+    # ToDo :
+    #  include 2 sentences case,
+    #  implement maxout layer,
+    #  add datasets
+
     def __init__(self, config, n_vocab, vocabulary, embeddings):
         super(BCN, self).__init__()
         self.word_vec_size = config['word_vec_size']
@@ -53,7 +58,7 @@ class BCN(nn.Module):
         self.fc2 = nn.Linear(self.fc_hidden_size1, self.mem_size)
 
         self.relu = nn.ReLU()
-        self.sm = nn.Softmax()
+        self.sm = nn.Softmax(dim=1)
         self.log_sm = nn.LogSoftmax()
         self.dropout = nn.Dropout(config['dropout'])
 
@@ -64,7 +69,7 @@ class BCN(nn.Module):
         max_len = max(lens)
         for l in lens:
             mask.append([1] * l + [0] * (max_len - l))
-        mask = Variable(torch.FloatTensor(mask))
+        mask = torch.FloatTensor(mask)
         if hidden_size == 1:
             trans_mask = mask
         else:
@@ -82,16 +87,11 @@ class BCN(nn.Module):
         reps = self.mtlstm(tokens_emb, length)
         reps = self.dropout(reps)
 
-        max_len = max(length)
+        task_specific_reps = (self.relu(self.fc(reps)))
 
-        compressed_reps = reps.view(-1, self.cove_size)
-        task_specific_reps = (self.relu(self.fc(compressed_reps))).view(
-            batch_size,
-            max_len,
-            self.fc_hidden_size)
-        task_specific_reps = pack(task_specific_reps,
-                                  length,
-                                  batch_first=True)
+        lens, indices = torch.sort(length, 0, True)
+        len_list = lens.tolist()
+        task_specific_reps = pack(task_specific_reps[indices], len_list, batch_first=True)
 
         outputs, _ = self.bilstm_encoder(task_specific_reps)
         X, _ = unpack(outputs, batch_first=True)
@@ -99,45 +99,46 @@ class BCN(nn.Module):
         # Compute biattention. This is a special case since the inputs are the same.
         attention_logits = X.bmm(X.permute(0, 2, 1).contiguous())
 
-        attention_mask1 = Variable((-1e7 * (attention_logits <= 1e-7).float()).data)
-        masked_attention_logits = attention_logits + attention_mask1
-        compressed_Ay = self.sm(masked_attention_logits.view(-1, max_len))
-        attention_mask2 = Variable((attention_logits >= 1e-7).float().data)  # mask those all zeros
-        Ay = compressed_Ay.view(batch_size, max_len, max_len) * attention_mask2
+        attention_mask1 = torch.Tensor((-1e7 * (attention_logits <= 1e-7).float()).detach())
+        masked_attention_logits = attention_logits + attention_mask1  # mask logits that are near zero
+        masked_Ax = self.sm(masked_attention_logits)  # prerform column-wise softmax
+        masked_Ay = self.sm(masked_attention_logits.permute(0, 2, 1))
+        attention_mask2 = torch.Tensor((attention_logits >= 1e-7).float().detach())  # mask those all zeros
+        Ax = masked_Ax * attention_mask2
+        Ay = masked_Ay * attention_mask2
 
-        Cy = torch.bmm(Ay, X)  # batch_size * max_len * bilstm_encoder_size
+        Cx = torch.bmm(Ax.permute(0, 2, 1), X)  # batch_size * max_len * bilstm_encoder_size
+        Cy = torch.bmm(Ay.permute(0, 2, 1), X)
 
         # Build the input to the integrator
         integrator_input = torch.cat([Cy,
                                       X - Cy,
                                       X * Cy], 2)
-        integrator_input = pack(integrator_input, length, batch_first=True)
+
+        integrator_input = pack(integrator_input[indices], len_list, batch_first=True)
 
         outputs, _ = self.bilstm_integrator(integrator_input)  # batch_size * max_len * bilstm_integrator_size
         Xy, _ = unpack(outputs, batch_first=True)
 
         # Simple Pooling layers
-        max_masked_Xy = Xy + -1e7 * (1 - self.makeMask(length,
+        max_masked_Xy = Xy + -1e7 * (1 - self.makeMask(len_list,
                                                        self.bilstm_integrator_size))
         max_pool = torch.max(max_masked_Xy, 1)[0]
-        min_masked_Xy = Xy + 1e7 * (1 - self.makeMask(length,
+        min_masked_Xy = Xy + 1e7 * (1 - self.makeMask(len_list,
                                                       self.bilstm_integrator_size))
         min_pool = torch.min(min_masked_Xy, 1)[0]
-        mean_pool = torch.sum(Xy, 1) / torch.sum(self.makeMask(length, 1),
+        mean_pool = torch.sum(Xy, 1) / torch.sum(self.makeMask(len_list, 1),
                                                  1,
                                                  keepdim=True)
 
         # Self-attentive pooling layer
         # Run through linear projection. Shape: (batch_size, sequence length, 1)
         # Then remove the last dimension to get the proper attention shape (batch_size, sequence length).
-        self_attentive_logits = self.attentive_pooling_proj(Xy.contiguous().view(-1,
-                                                                                 self.bilstm_integrator_size))
-        self_attentive_logits = self_attentive_logits.view(batch_size, max_len) \
-                                + -1e7 * (1 - self.makeMask(length, 1))
+        self_attentive_logits = self.attentive_pooling_proj(Xy.contiguous())
+        self_attentive_logits = torch.squeeze(self_attentive_logits) \
+                                + -1e7 * (1 - self.makeMask(len_list, 1))
         self_weights = self.sm(self_attentive_logits)
-        self_attentive_pool = torch.bmm(self_weights.view(batch_size,
-                                                          1,
-                                                          max_len),
+        self_attentive_pool = torch.bmm(self_weights.unsqueeze(1),
                                         Xy).squeeze(1)
 
         pooled_representations = torch.cat([max_pool,

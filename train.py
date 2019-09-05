@@ -13,6 +13,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 MODEL_CNF_DIR = os.path.join(BASE_DIR, "model_configs")
 
+
 def bcn(config, data_file, embeddings, device):
     inputs = data.Field(lower=True, include_lengths=True, batch_first=True)
 
@@ -26,7 +27,7 @@ def bcn(config, data_file, embeddings, device):
     inputs.build_vocab(train, dev, test)
     inputs.vocab.load_vectors(vectors=GloVe(name='840B', dim=300, cache=embeddings))
 
-    model = BCN(config=config, n_vocab=len(inputs.vocab),  vocabulary=inputs.vocab.vectors, embeddings=embeddings)
+    model = BCN(config=config, n_vocab=len(inputs.vocab), vocabulary=inputs.vocab.vectors, embeddings=embeddings)
 
     if device != -1:
         model.to(device)
@@ -40,6 +41,7 @@ def bcn(config, data_file, embeddings, device):
         model(*batch.src)
 
     return
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -60,6 +62,7 @@ def main():
     config["gpu"] = args.device
 
     bcn(config, data_file, args.embeddings, args.device)
+
 
 if __name__ == '__main__':
     main()
