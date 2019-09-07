@@ -1,8 +1,8 @@
 word_vec_size: 300
 mtlstm_hidden_size: 600
 fc_hidden_size: 300
-bilstm_encoder_size: 300
-bilstm_integrator_size: 300
+bilstm_encoder_size: 600
+bilstm_integrator_size: 600
 fc_hidden_size1: 600
 mem_size: 300
-dropout: 0.5
+dropout: 0.2

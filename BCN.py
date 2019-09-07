@@ -1,10 +1,6 @@
 import torch
 import torch.nn as nn
-import numpy as np
-import math
-import torch.nn.init as init
-from torch.autograd import Variable
-import torch.nn.functional as F
+from MaxOut import Maxout
 from torch.nn.utils.rnn import pad_packed_sequence as unpack
 from torch.nn.utils.rnn import pack_padded_sequence as pack
 
@@ -18,10 +14,9 @@ class BCN(nn.Module):
 
     # ToDo :
     #  include 2 sentences case,
-    #  implement maxout layer,
-    #  add datasets
+    #  review masks + maxout + parameters
 
-    def __init__(self, config, n_vocab, vocabulary, embeddings):
+    def __init__(self, config, n_vocab, vocabulary, embeddings, num_labels):
         super(BCN, self).__init__()
         self.word_vec_size = config['word_vec_size']
         self.mtlstm_hidden_size = config['mtlstm_hidden_size']
@@ -61,6 +56,13 @@ class BCN(nn.Module):
         self.sm = nn.Softmax(dim=1)
         self.log_sm = nn.LogSoftmax()
         self.dropout = nn.Dropout(config['dropout'])
+        self.bn1 = nn.BatchNorm1d(self.bilstm_integrator_size * 4)
+        self.bn2 = nn.BatchNorm1d((self.bilstm_integrator_size * 4)//2//2)
+        self.fc1_maxout = nn.Linear(self.bilstm_integrator_size * 4, (self.bilstm_integrator_size * 4)//2)
+        self.fc2_maxout = nn.Linear((self.bilstm_integrator_size * 4) //2 //2,
+                                    (self.bilstm_integrator_size * 4) // 2 // 2 // 2)
+        self.classifier = nn.Linear((self.bilstm_integrator_size * 4) // 2 // 2 // 2, num_labels)
+        self.maxout = Maxout()
 
         self.gpu = config['gpu']
 
@@ -147,7 +149,12 @@ class BCN(nn.Module):
                                             self_attentive_pool], 1)
         pooled_representations_dropped = self.dropout(pooled_representations)
 
-        rep = self.dropout(self.relu(self.fc1(pooled_representations_dropped)))
-        rep = self.dropout(self.relu(self.fc2(rep)))
+        bn_pooled = self.bn1(pooled_representations_dropped)
+        max_out1 = self.maxout(self.fc1_maxout(bn_pooled))
+        max_out1_dropped = self.dropout(max_out1)
+        bn_max_out1 = self.bn2(max_out1_dropped)
+        max_out2 = self.maxout(self.fc2_maxout(bn_max_out1))
+        max_out2_dropped = self.dropout(max_out2)
 
-        return rep, None
+        logits = self.classifier(max_out2_dropped)
+        return logits
