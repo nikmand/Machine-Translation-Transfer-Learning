@@ -4,7 +4,7 @@ import os
 import torch
 from sklearn.metrics import accuracy_score, f1_score
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+from sys_config import BASE_DIR
 
 
 def get_total_steps(dataset, cfg):
@@ -98,4 +98,3 @@ def acc(y, y_hat):
 
 def f1_macro(y, y_hat):
     return f1_score(y, y_hat, average='macro')
-

@@ -42,8 +42,6 @@ class BCNTrainer(Trainer):
         self.epoch += 1
         epoch_start = time.time()
 
-        self.train_loader.init_epoch()
-
         if isinstance(self.train_loader, (tuple, list)):
             iterator = zip(*self.train_loader)
         else:
@@ -132,7 +130,7 @@ class BCNTrainer(Trainer):
                                                item_array).dtype))
 
                 else:
-                    X = to_device(batch.text[0], device=self.device, dtype=batch.dtype)
+                    X = to_device(batch.text[0], device=self.device, dtype=batch.text[0].dtype)
 
                 y = to_device(batch.label, device=self.device, dtype=torch.long)
 

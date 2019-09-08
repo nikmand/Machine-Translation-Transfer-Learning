@@ -3,6 +3,7 @@ from torch.optim.adam import Adam
 from BCN import BCN
 from logger.experiment import Experiment
 from modules.BCNTrainer import BCNTrainer
+from sys_config import EXP_DIR, MODEL_CNF_DIR
 from utils.config import load_config
 import os
 import argparse
@@ -10,7 +11,6 @@ from torchtext import data
 from torchtext import datasets
 from torchtext.vocab import GloVe
 import torch.nn as nn
-import torch.nn.functional as F
 import torch
 
 from encoder import MTLSTM
@@ -18,12 +18,8 @@ from utils.earlystopping import EarlyStopping
 from utils.general import number_h
 from utils.training import f1_macro, acc
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_CNF_DIR = os.path.join(BASE_DIR, "model_configs")
-EXP_DIR = os.path.join(BASE_DIR, 'experiments')
 
 def bcn(config, data_file, embeddings, device):
-    #   ToDo : fix trainer
     #   extensions : add 2 languages, use a combination of CoVe embeddings (like ELMo)
 
     name = "test_model"
@@ -35,7 +31,9 @@ def bcn(config, data_file, embeddings, device):
     # using the IWSLT 2016 TED talk translation task
     # train, dev, test = datasets.IWSLT.splits(root=data_file, exts=['.en', '.de'], fields=[inputs, inputs])
     # using SST
-    train, dev, test = datasets.SST.splits(text_field=inputs, label_field=labels, root=data_file)
+    train, dev, test = datasets.SST.splits(text_field=inputs, label_field=labels, root=data_file, fine_grained=False,
+                                           train_subtrees=True,
+                                           filter_pred=lambda ex: ex.label != 'neutral')
     train_iter, dev_iter, test_iter = data.Iterator.splits(
         (train, dev, test), batch_size=config["train_batch_size"], device=torch.device(device) if device >= 0 else None)
 
@@ -48,16 +46,16 @@ def bcn(config, data_file, embeddings, device):
     model = BCN(config=config, n_vocab=len(inputs.vocab), vocabulary=inputs.vocab.vectors, embeddings=embeddings,
                 num_labels=len(labels.vocab.freqs))
 
-    parameters = filter(lambda p: p.requires_grad, model.parameters())
+    bcn_params = [p for n, p in model.named_parameters() if "mtlstm" not in n and p.requires_grad]
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = Adam(parameters, lr=0.001)
+    optimizer = Adam(bcn_params, lr=0.001)
 
     if device != -1:
         model.to(device)
     print(model)
     total_params = sum(p.numel() for p in model.parameters())
-    total_trainable_params = sum(p.numel() for p in model.parameters()
+    total_trainable_params = sum(p.numel() for p in bcn_params
                                  if p.requires_grad)
 
     print("Total Params:", number_h(total_params))
@@ -70,7 +68,6 @@ def bcn(config, data_file, embeddings, device):
                          config=config, optimizers=optimizer)
 
     print('Generating CoVe')
-
 
     ####################################################################
     # Experiment: logging and visualizing the training process
@@ -106,9 +103,6 @@ def bcn(config, data_file, embeddings, device):
         print(epoch_log)
         exp.update_value("epoch", epoch_log)
 
-        ###############################################################
-        # Unfreezing the model after X epochs
-        ###############################################################
         # Save the model if the val loss is the best we've seen so far.
         if not best_loss or val_loss < best_loss:
             best_loss = val_loss

@@ -54,7 +54,6 @@ class BCN(nn.Module):
 
         self.relu = nn.ReLU()
         self.sm = nn.Softmax(dim=1)
-        self.log_sm = nn.LogSoftmax()
         self.dropout = nn.Dropout(config['dropout'])
         self.bn1 = nn.BatchNorm1d(self.bilstm_integrator_size * 4)
         self.bn2 = nn.BatchNorm1d((self.bilstm_integrator_size * 4)//2//2)

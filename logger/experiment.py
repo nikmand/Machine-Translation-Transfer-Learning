@@ -1,5 +1,3 @@
-
-
 import json
 import os
 import pickle
@@ -12,16 +10,7 @@ from tabulate import tabulate
 
 from logger.helpers import dict_to_html, files_to_dict
 from logger.plotting import Visualizer
-
-VIS = {
-    "enabled": True,
-    "server": "http://localhost",
-    "port": 8097,
-    "base_url": "/",
-    "http_proxy_host": None,
-    "http_proxy_port": None
-}
-
+from sys_config import VIS
 
 
 class Experiment(object):
