@@ -1,4 +1,8 @@
+from torch.optim.adam import Adam
+
 from BCN import BCN
+from logger.experiment import Experiment
+from modules.BCNTrainer import BCNTrainer
 from utils.config import load_config
 import os
 import argparse
@@ -10,16 +14,19 @@ import torch.nn.functional as F
 import torch
 
 from encoder import MTLSTM
+from utils.earlystopping import EarlyStopping
 from utils.general import number_h
+from utils.training import f1_macro, acc
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
 MODEL_CNF_DIR = os.path.join(BASE_DIR, "model_configs")
-
+EXP_DIR = os.path.join(BASE_DIR, 'experiments')
 
 def bcn(config, data_file, embeddings, device):
     #   ToDo : fix trainer
     #   extensions : add 2 languages, use a combination of CoVe embeddings (like ELMo)
+
+    name = "test_model"
 
     inputs = data.Field(lower=True, include_lengths=True, batch_first=True)
     labels = data.Field(sequential=False, unk_token=None)
@@ -30,7 +37,7 @@ def bcn(config, data_file, embeddings, device):
     # using SST
     train, dev, test = datasets.SST.splits(text_field=inputs, label_field=labels, root=data_file)
     train_iter, dev_iter, test_iter = data.Iterator.splits(
-        (train, dev, test), batch_size=100, device=torch.device(device) if device >= 0 else None)
+        (train, dev, test), batch_size=config["train_batch_size"], device=torch.device(device) if device >= 0 else None)
 
     print('Building vocabulary')
     inputs.build_vocab(train, dev, test)
@@ -41,7 +48,10 @@ def bcn(config, data_file, embeddings, device):
     model = BCN(config=config, n_vocab=len(inputs.vocab), vocabulary=inputs.vocab.vectors, embeddings=embeddings,
                 num_labels=len(labels.vocab.freqs))
 
+    parameters = filter(lambda p: p.requires_grad, model.parameters())
+
     criterion = nn.CrossEntropyLoss()
+    optimizer = Adam(parameters, lr=0.001)
 
     if device != -1:
         model.to(device)
@@ -53,14 +63,66 @@ def bcn(config, data_file, embeddings, device):
     print("Total Params:", number_h(total_params))
     print("Total Trainable Params:", number_h(total_trainable_params))
 
-    train_iter.init_epoch()
+    #####################################
+    # Training Pipeline
+    #####################################
+    trainer = BCNTrainer(model=model, train_loader=train_iter, valid_loader=dev_iter, criterion=criterion, device="cpu",
+                         config=config, optimizers=optimizer)
+
     print('Generating CoVe')
-    for batch_idx, batch in enumerate(train_iter):
-        y_pred = model(*batch.text)
 
-        cls_loss = criterion(y_pred, batch.label)
 
-    return
+    ####################################################################
+    # Experiment: logging and visualizing the training process
+    ####################################################################
+    exp = Experiment(name, config, src_dirs=None, output_dir=EXP_DIR)
+    exp.add_metric("ep_loss", "line", "epoch loss class", ["TRAIN", "VAL"])
+    exp.add_metric("ep_f1", "line", "epoch f1", ["TRAIN", "VAL"])
+    exp.add_metric("ep_acc", "line", "epoch accuracy", ["TRAIN", "VAL"])
+
+    exp.add_value("epoch", title="epoch summary")
+    exp.add_value("progress", title="training progress")
+
+    ####################################################################
+    # Training Loop
+    ####################################################################
+    best_loss = None
+    early_stopping = EarlyStopping("min", config["patience"])
+
+    for epoch in range(1, config["epochs"] + 1):
+        train_loss = trainer.train_epoch()
+        val_loss, y, y_pred = trainer.eval_epoch()
+
+        # Calculate accuracy and f1-macro on the evaluation set
+        exp.update_metric("ep_loss", train_loss.item(), "TRAIN")
+        exp.update_metric("ep_loss", val_loss.item(), "VAL")
+        exp.update_metric("ep_f1", 0, "TRAIN")
+        exp.update_metric("ep_f1", f1_macro(y, y_pred), "VAL")
+        exp.update_metric("ep_acc", 0, "TRAIN")
+        exp.update_metric("ep_acc", acc(y, y_pred), "VAL")
+
+        print()
+        epoch_log = exp.log_metrics(["ep_loss", "ep_f1", "ep_acc"])
+        print(epoch_log)
+        exp.update_value("epoch", epoch_log)
+
+        ###############################################################
+        # Unfreezing the model after X epochs
+        ###############################################################
+        # Save the model if the val loss is the best we've seen so far.
+        if not best_loss or val_loss < best_loss:
+            best_loss = val_loss
+            trainer.best_acc = acc(y, y_pred)
+            trainer.best_f1 = f1_macro(y, y_pred)
+            trainer.checkpoint(name=name)
+
+        if early_stopping.stop(val_loss):
+            print("Early Stopping (according to cls loss)....")
+            break
+
+        print("\n" * 2)
+
+    return best_loss, trainer.best_acc, trainer.best_f1
 
 
 def main():

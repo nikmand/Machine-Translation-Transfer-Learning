@@ -61,7 +61,7 @@ class BCN(nn.Module):
         self.fc1_maxout = nn.Linear(self.bilstm_integrator_size * 4, (self.bilstm_integrator_size * 4)//2)
         self.fc2_maxout = nn.Linear((self.bilstm_integrator_size * 4) //2 //2,
                                     (self.bilstm_integrator_size * 4) // 2 // 2 // 2)
-        self.classifier = nn.Linear((self.bilstm_integrator_size * 4) // 2 // 2 // 2, num_labels)
+        self.classifier = nn.Linear((self.bilstm_integrator_size * 4) // 2 // 2 // 2 // 2, num_labels)
         self.maxout = Maxout()
 
         self.gpu = config['gpu']
@@ -84,7 +84,6 @@ class BCN(nn.Module):
             return trans_mask
 
     def forward(self, tokens_emb, length):
-        batch_size = tokens_emb.size(0)
 
         reps = self.mtlstm(tokens_emb, length)
         reps = self.dropout(reps)
