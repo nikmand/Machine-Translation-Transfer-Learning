@@ -34,14 +34,15 @@ def bcn(config, data_file, embeddings, device):
     train, dev, test = datasets.SST.splits(text_field=inputs, label_field=labels, root=data_file, fine_grained=False,
                                            train_subtrees=True,
                                            filter_pred=lambda ex: ex.label != 'neutral')
-    train_iter, dev_iter, test_iter = data.Iterator.splits(
-        (train, dev, test), batch_size=config["train_batch_size"], device=torch.device(device) if device >= 0 else None)
-
     print('Building vocabulary')
     inputs.build_vocab(train, dev, test)
     inputs.vocab.load_vectors(vectors=GloVe(name='840B', dim=300, cache=embeddings))
 
     labels.build_vocab(train, dev, test)
+
+    train_iter, dev_iter, test_iter = data.BucketIterator.splits(
+        (train, dev, test), batch_size=config["train_batch_size"], device=torch.device(device) if device >= 0 else None,
+        sort_within_batch=True)
 
     model = BCN(config=config, n_vocab=len(inputs.vocab), vocabulary=inputs.vocab.vectors, embeddings=embeddings,
                 num_labels=len(labels.vocab.freqs))
@@ -65,7 +66,7 @@ def bcn(config, data_file, embeddings, device):
     # Training Pipeline
     #####################################
     trainer = BCNTrainer(model=model, train_loader=train_iter, valid_loader=dev_iter, criterion=criterion, device="cpu",
-                         config=config, optimizers=optimizer)
+                         config=config, optimizers=[optimizer])
 
     print('Generating CoVe')
 

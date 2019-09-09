@@ -24,8 +24,6 @@ class BCN(nn.Module):
         self.fc_hidden_size = config['fc_hidden_size']
         self.bilstm_encoder_size = config['bilstm_encoder_size']
         self.bilstm_integrator_size = config['bilstm_integrator_size']
-        self.fc_hidden_size1 = config['fc_hidden_size1']
-        self.mem_size = config['mem_size']
 
         self.mtlstm = MTLSTM(n_vocab=n_vocab, vectors=vocabulary, residual_embeddings=True, model_cache=embeddings)
 
@@ -47,10 +45,6 @@ class BCN(nn.Module):
 
         self.attentive_pooling_proj = nn.Linear(self.bilstm_integrator_size,
                                                 1)
-
-        self.fc1 = nn.Linear(self.bilstm_integrator_size * 4,
-                             self.fc_hidden_size1)
-        self.fc2 = nn.Linear(self.fc_hidden_size1, self.mem_size)
 
         self.relu = nn.ReLU()
         self.sm = nn.Softmax(dim=1)
@@ -97,7 +91,7 @@ class BCN(nn.Module):
         X, _ = unpack(outputs, batch_first=True)
 
         # Compute biattention. This is a special case since the inputs are the same.
-        attention_logits = X.bmm(X.permute(0, 2, 1).contiguous())
+        attention_logits = X.bmm(X.permute(0, 2, 1))
 
         attention_mask1 = torch.Tensor((-1e7 * (attention_logits <= 1e-7).float()).detach())
         masked_attention_logits = attention_logits + attention_mask1  # mask logits that are near zero
@@ -134,7 +128,7 @@ class BCN(nn.Module):
         # Self-attentive pooling layer
         # Run through linear projection. Shape: (batch_size, sequence length, 1)
         # Then remove the last dimension to get the proper attention shape (batch_size, sequence length).
-        self_attentive_logits = self.attentive_pooling_proj(Xy.contiguous())
+        self_attentive_logits = self.attentive_pooling_proj(Xy)
         self_attentive_logits = torch.squeeze(self_attentive_logits) \
                                 + -1e7 * (1 - self.makeMask(len_list, 1))
         self_weights = self.sm(self_attentive_logits)
