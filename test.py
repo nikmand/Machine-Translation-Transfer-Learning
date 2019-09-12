@@ -30,7 +30,7 @@ def bcn(config, data_file, embeddings, device, chekpoint):
     # train, dev, test = datasets.IWSLT.splits(root=data_file, exts=['.en', '.de'], fields=[inputs, inputs])
     # using SST
     train, dev, test = datasets.SST.splits(text_field=inputs, label_field=labels, root=data_file, fine_grained=False,
-                                           train_subtrees=True ,
+                                           train_subtrees=True,
                                            filter_pred=lambda ex: ex.label != 'neutral')
     print('Building vocabulary')
     inputs.build_vocab(train, dev, test)
