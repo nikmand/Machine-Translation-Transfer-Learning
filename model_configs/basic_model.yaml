@@ -3,7 +3,7 @@ mtlstm_hidden_size: 600
 fc_hidden_size: 300
 bilstm_encoder_size: 600
 bilstm_integrator_size: 600
-dropout: 0.1
+dropout: 0.2
 patience: 5
 epochs: 100
 

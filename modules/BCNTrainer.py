@@ -196,9 +196,9 @@ class BCNTrainer(Trainer):
         with torch.no_grad():
             for i_batch, batch in enumerate(iterator, 1):
 
-                if isinstance(batch[0], list):
+                if isinstance(batch.text[0], list):
                     X = []
-                    for item in batch[0]:
+                    for item in batch.text[0]:
                         item_array = numpy.array(item)
                         X.append(to_device(torch.from_numpy(item_array),
                                            device=self.device,
@@ -206,14 +206,14 @@ class BCNTrainer(Trainer):
                                                item_array).dtype))
 
                 else:
-                    X = to_device(batch, device=self.device, dtype=batch.dtype)
+                    X = to_device(batch.text[0], device=self.device, dtype=batch.text[0].dtype)
 
-                y = to_device(batch[1], device=self.device, dtype=torch.long)
+                y = to_device(batch.label, device=self.device, dtype=torch.long)
 
-                lengths = to_device(batch[2], device=self.device,
+                lengths = to_device(batch.text[1], device=self.device,
                                     dtype=torch.long)
 
-                batch_losses, label, cls_logits = self.process_batch(X, y, lengths)
+                batch_losses, label, cls_logits = self.process_batch(X, lengths, y)
                 labels.append(label)
                 posteriors.append(cls_logits)
 

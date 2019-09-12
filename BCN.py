@@ -20,12 +20,13 @@ class BCN(nn.Module):
         super(BCN, self).__init__()
         self.word_vec_size = config['word_vec_size']
         self.mtlstm_hidden_size = config['mtlstm_hidden_size']
-        self.cove_size = self.mtlstm_hidden_size + self.word_vec_size
+        self.cove_size = self.word_vec_size + self.mtlstm_hidden_size
         self.fc_hidden_size = config['fc_hidden_size']
         self.bilstm_encoder_size = config['bilstm_encoder_size']
         self.bilstm_integrator_size = config['bilstm_integrator_size']
 
-        self.mtlstm = MTLSTM(n_vocab=n_vocab, vectors=vocabulary, residual_embeddings=True, model_cache=embeddings)
+        self.mtlstm = MTLSTM(n_vocab=n_vocab, vectors=vocabulary, residual_embeddings=True, model_cache=embeddings,
+                             layer0=False, layer1=True)
 
         self.fc = nn.Linear(self.cove_size, self.fc_hidden_size)
 
@@ -46,16 +47,21 @@ class BCN(nn.Module):
         self.attentive_pooling_proj = nn.Linear(self.bilstm_integrator_size,
                                                 1)
 
+        self.pool_size = 4
         self.relu = nn.ReLU()
         self.sm = nn.Softmax(dim=1)
         self.dropout = nn.Dropout(config['dropout'])
+        # self.fc1 = nn.Linear(self.bilstm_integrator_size * 4,
+        #                      self.bilstm_integrator_size * 4 // 4)
+        # self.fc2 = nn.Linear(self.bilstm_integrator_size * 4 // 4, self.bilstm_integrator_size * 4 // 4 // 4)
+        # self.classifier = nn.Linear(self.bilstm_integrator_size * 4 // 4 // 4, num_labels)
+
         self.bn1 = nn.BatchNorm1d(self.bilstm_integrator_size * 4)
-        self.bn2 = nn.BatchNorm1d((self.bilstm_integrator_size * 4)//2//2)
-        self.fc1_maxout = nn.Linear(self.bilstm_integrator_size * 4, (self.bilstm_integrator_size * 4)//2)
-        self.fc2_maxout = nn.Linear((self.bilstm_integrator_size * 4) //2 //2,
-                                    (self.bilstm_integrator_size * 4) // 2 // 2 // 2)
-        self.classifier = nn.Linear((self.bilstm_integrator_size * 4) // 2 // 2 // 2 // 2, num_labels)
-        self.maxout = Maxout()
+        self.bn2 = nn.BatchNorm1d((self.bilstm_integrator_size * 4) // 4)
+        self.maxout1 = Maxout(self.bilstm_integrator_size * 4, self.bilstm_integrator_size * 4 // 4, self.pool_size)
+        self.maxout2 = Maxout(self.bilstm_integrator_size * 4 // 4,
+                                 self.bilstm_integrator_size * 4 // 4 // 4, self.pool_size)
+        self.classifier = nn.Linear((self.bilstm_integrator_size * 4) // 4 // 4, num_labels)
 
         self.gpu = config['gpu']
 
@@ -93,7 +99,8 @@ class BCN(nn.Module):
         # Compute biattention. This is a special case since the inputs are the same.
         attention_logits = X.bmm(X.permute(0, 2, 1))
 
-        attention_mask1 = torch.Tensor((-1e7 * (attention_logits <= 1e-7).float()).detach())
+        # turn small values into very negative ones (-Inf) so that they can be zeroed during softmax
+        attention_mask1 = torch.Tensor((-1e32 * (attention_logits <= 1e-7).float()).detach())
         masked_attention_logits = attention_logits + attention_mask1  # mask logits that are near zero
         masked_Ax = self.sm(masked_attention_logits)  # prerform column-wise softmax
         masked_Ay = self.sm(masked_attention_logits.permute(0, 2, 1))
@@ -105,7 +112,7 @@ class BCN(nn.Module):
         Cy = torch.bmm(Ay.permute(0, 2, 1), X)
 
         # Build the input to the integrator
-        integrator_input = torch.cat([Cy,
+        integrator_input = torch.cat([X,
                                       X - Cy,
                                       X * Cy], 2)
 
@@ -142,11 +149,14 @@ class BCN(nn.Module):
         pooled_representations_dropped = self.dropout(pooled_representations)
 
         bn_pooled = self.bn1(pooled_representations_dropped)
-        max_out1 = self.maxout(self.fc1_maxout(bn_pooled))
+        max_out1 = self.maxout1(bn_pooled)
         max_out1_dropped = self.dropout(max_out1)
         bn_max_out1 = self.bn2(max_out1_dropped)
-        max_out2 = self.maxout(self.fc2_maxout(bn_max_out1))
+        max_out2 = self.maxout2(bn_max_out1)
         max_out2_dropped = self.dropout(max_out2)
+
+        # rep = self.dropout(self.relu(self.fc1(pooled_representations_dropped)))
+        # rep = self.dropout(self.relu(self.fc2(rep)))
 
         logits = self.classifier(max_out2_dropped)
         return logits
