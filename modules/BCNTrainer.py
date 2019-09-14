@@ -17,7 +17,7 @@ class BCNTrainer(Trainer):
         self.best_f1 = None
         self.best_acc = None
 
-    def process_batch(self, inputs,  lengths, labels):
+    def process_batch(self, inputs, lengths, labels):
 
         y_pred = self.model(inputs, lengths)
 
@@ -151,6 +151,7 @@ class BCNTrainer(Trainer):
         labels_array = numpy.array((torch.cat(labels, dim=0)).cpu())
 
         return numpy.array(losses).mean(axis=0), labels_array, predicted
+
     def get_state(self):
 
         state = {

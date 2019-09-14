@@ -60,13 +60,14 @@ class BCN(nn.Module):
         self.bn2 = nn.BatchNorm1d((self.bilstm_integrator_size * 4) // 4)
         self.maxout1 = Maxout(self.bilstm_integrator_size * 4, self.bilstm_integrator_size * 4 // 4, self.pool_size)
         self.maxout2 = Maxout(self.bilstm_integrator_size * 4 // 4,
-                                 self.bilstm_integrator_size * 4 // 4 // 4, self.pool_size)
+                              self.bilstm_integrator_size * 4 // 4 // 4, self.pool_size)
         self.classifier = nn.Linear((self.bilstm_integrator_size * 4) // 4 // 4, num_labels)
 
         self.gpu = config['gpu']
 
     def makeMask(self, lens, hidden_size):
         mask = []
+        lens = lens.tolist()
         max_len = max(lens)
         for l in lens:
             mask.append([1] * l + [0] * (max_len - l))
@@ -85,6 +86,7 @@ class BCN(nn.Module):
     def forward(self, tokens_emb, length):
 
         reps = self.mtlstm(tokens_emb, length)
+        # glove = reps[:, :, :300]
         reps = self.dropout(reps)
 
         task_specific_reps = (self.relu(self.fc(reps)))
@@ -95,6 +97,8 @@ class BCN(nn.Module):
 
         outputs, _ = self.bilstm_encoder(task_specific_reps)
         X, _ = unpack(outputs, batch_first=True)
+        _, _indices = torch.sort(indices, 0)
+        X = X[_indices]
 
         # Compute biattention. This is a special case since the inputs are the same.
         attention_logits = X.bmm(X.permute(0, 2, 1))
@@ -120,15 +124,17 @@ class BCN(nn.Module):
 
         outputs, _ = self.bilstm_integrator(integrator_input)  # batch_size * max_len * bilstm_integrator_size
         Xy, _ = unpack(outputs, batch_first=True)
+        _, _indices = torch.sort(indices, 0)
+        Xy = Xy[_indices]
 
         # Simple Pooling layers
-        max_masked_Xy = Xy + -1e7 * (1 - self.makeMask(len_list,
+        max_masked_Xy = Xy + -1e7 * (1 - self.makeMask(length,
                                                        self.bilstm_integrator_size))
         max_pool = torch.max(max_masked_Xy, 1)[0]
-        min_masked_Xy = Xy + 1e7 * (1 - self.makeMask(len_list,
+        min_masked_Xy = Xy + 1e7 * (1 - self.makeMask(length,
                                                       self.bilstm_integrator_size))
         min_pool = torch.min(min_masked_Xy, 1)[0]
-        mean_pool = torch.sum(Xy, 1) / torch.sum(self.makeMask(len_list, 1),
+        mean_pool = torch.sum(Xy, 1) / torch.sum(self.makeMask(length, 1),
                                                  1,
                                                  keepdim=True)
 
@@ -137,10 +143,9 @@ class BCN(nn.Module):
         # Then remove the last dimension to get the proper attention shape (batch_size, sequence length).
         self_attentive_logits = self.attentive_pooling_proj(Xy)
         self_attentive_logits = torch.squeeze(self_attentive_logits) \
-                                + -1e7 * (1 - self.makeMask(len_list, 1))
+                                + -1e32 * (1 - self.makeMask(length, 1))
         self_weights = self.sm(self_attentive_logits)
-        self_attentive_pool = torch.bmm(self_weights.unsqueeze(1),
-                                        Xy).squeeze(1)
+        self_attentive_pool = self_weights.unsqueeze(1).bmm(Xy).squeeze(1)
 
         pooled_representations = torch.cat([max_pool,
                                             min_pool,

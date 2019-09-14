@@ -57,7 +57,7 @@ def bcn(config, data_file, embeddings, device, chekpoint):
     #####################################
     # Training Pipeline
     #####################################
-    trainer = BCNTrainer(model=model, train_loader=None, valid_loader=test_iter, criterion=criterion, device="cpu",
+    trainer = BCNTrainer(model=model, train_loader=None, valid_loader=dev_iter, criterion=criterion, device="cpu",
                          config=config, optimizers=[optimizer])
 
     state = load_checkpoint(chekpoint)
@@ -84,7 +84,7 @@ def main():
     parser.add_argument('--device', default=-1, help='Which device to run one; -1 for CPU', type=int)
     parser.add_argument('--data', default='resources', help='where to store data')
     parser.add_argument('--embeddings', default='.embeddings', help='where to store embeddings')
-    parser.add_argument('--checkpoint', default='test_model_19-09-12_16:34:38')
+    parser.add_argument('--checkpoint', default='test_model_19-09-14_14:54:59')
 
     args = parser.parse_args()
     input_config = args.input
