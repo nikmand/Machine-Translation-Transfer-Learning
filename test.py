@@ -54,6 +54,12 @@ def bcn(config, data_file, embeddings, device, chekpoint):
         model.to(device)
     print(model)
 
+    total_params = sum(p.numel() for p in model.parameters())
+    total_trainable_params = sum(p.numel() for p in bcn_params
+                                 if p.requires_grad)
+
+    print("Total Params:", number_h(total_params))
+    print("Total Trainable Params:", number_h(total_trainable_params))
     #####################################
     # Training Pipeline
     #####################################
@@ -84,7 +90,7 @@ def main():
     parser.add_argument('--device', default=-1, help='Which device to run one; -1 for CPU', type=int)
     parser.add_argument('--data', default='resources', help='where to store data')
     parser.add_argument('--embeddings', default='.embeddings', help='where to store embeddings')
-    parser.add_argument('--checkpoint', default='test_model_19-09-14_14:54:59')
+    parser.add_argument('--checkpoint', default='test_model_19-09-15_17:32:45')
 
     args = parser.parse_args()
     input_config = args.input

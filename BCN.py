@@ -14,7 +14,7 @@ class BCN(nn.Module):
 
     # ToDo :
     #  include 2 sentences case,
-    #  review masks + maxout + parameters
+    #  review masks + parameters
 
     def __init__(self, config, n_vocab, vocabulary, embeddings, num_labels):
         super(BCN, self).__init__()
@@ -24,9 +24,10 @@ class BCN(nn.Module):
         self.fc_hidden_size = config['fc_hidden_size']
         self.bilstm_encoder_size = config['bilstm_encoder_size']
         self.bilstm_integrator_size = config['bilstm_integrator_size']
+        self.decove = config["deep_vectors"] == "True"
 
         self.mtlstm = MTLSTM(n_vocab=n_vocab, vectors=vocabulary, residual_embeddings=True, model_cache=embeddings,
-                             layer0=False, layer1=True)
+                             layer0=self.decove, layer1=True)
 
         self.fc = nn.Linear(self.cove_size, self.fc_hidden_size)
 
@@ -47,7 +48,7 @@ class BCN(nn.Module):
         self.attentive_pooling_proj = nn.Linear(self.bilstm_integrator_size,
                                                 1)
 
-        self.pool_size = 4
+        self.pool_size = config["maxout_channels"]
         self.relu = nn.ReLU()
         self.sm = nn.Softmax(dim=1)
         self.dropout = nn.Dropout(config['dropout'])
@@ -64,6 +65,9 @@ class BCN(nn.Module):
         self.classifier = nn.Linear((self.bilstm_integrator_size * 4) // 4 // 4, num_labels)
 
         self.gpu = config['gpu']
+
+        self.w = nn.Parameter(torch.Tensor([[0.0], [0.0]]), requires_grad=True)
+        self.gama = nn.Parameter(torch.Tensor([1.0]), requires_grad=True)
 
     def makeMask(self, lens, hidden_size):
         mask = []
@@ -86,7 +90,16 @@ class BCN(nn.Module):
     def forward(self, tokens_emb, length):
 
         reps = self.mtlstm(tokens_emb, length)
-        # glove = reps[:, :, :300]
+        if self.decove:
+            glove = reps[:, :, :300]
+            cove_1 = reps[:, :, 300:900]
+            cove_2 = reps[:, :, 900:]
+
+            s = torch.cat([cove_1.unsqueeze(-1), cove_2.unsqueeze(-1)], 3).detach()
+            softmax_weghts = torch.softmax(self.w, dim=0)
+            weighted_reps = s.matmul(softmax_weghts).squeeze(-1) * self.gama
+            reps = torch.cat([glove, weighted_reps], dim=2)
+
         reps = self.dropout(reps)
 
         task_specific_reps = (self.relu(self.fc(reps)))

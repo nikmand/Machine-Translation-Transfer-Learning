@@ -89,6 +89,7 @@ def bcn(config, data_file, embeddings, device):
 
     for epoch in range(1, config["epochs"] + 1):
         train_loss = trainer.train_epoch()
+        print(model.w, model.gama)
         val_loss, y, y_pred = trainer.eval_epoch()
 
         # Calculate accuracy and f1-macro on the evaluation set
