@@ -6,7 +6,7 @@ bilstm_integrator_size: 600
 maxout_channels: 4
 deep_vectors: True
 
-dropout: 0.5
+dropout: 0.3
 patience: 5
 epochs: 100
 
