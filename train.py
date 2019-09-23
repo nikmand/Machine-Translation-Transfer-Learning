@@ -19,7 +19,7 @@ from utils.general import number_h
 from utils.training import f1_macro, acc
 
 
-def bcn(config, data_file, embeddings, device):
+def bcn(config, data_file, embeddings, device, dataset, fine_grained):
     #   extensions : add 2 languages, use a combination of CoVe embeddings (like ELMo)
 
     name = "test_model"
@@ -28,12 +28,26 @@ def bcn(config, data_file, embeddings, device):
     labels = data.Field(sequential=False, unk_token=None)
 
     print('Generating train, dev, test splits')
-    # using the IWSLT 2016 TED talk translation task
-    # train, dev, test = datasets.IWSLT.splits(root=data_file, exts=['.en', '.de'], fields=[inputs, inputs])
-    # using SST
-    train, dev, test = datasets.SST.splits(text_field=inputs, label_field=labels, root=data_file, fine_grained=False,
-                                           train_subtrees=True,
-                                           filter_pred=lambda ex: ex.label != 'neutral')
+
+    if dataset == 'IWSLT':
+        # using the IWSLT 2016 TED talk translation task
+        train, dev, test = datasets.IWSLT.splits(root=data_file, exts=['.en', '.de'], fields=[inputs, inputs])
+    elif dataset == 'SST':
+        train, dev, test = datasets.SST.splits(text_field=inputs, label_field=labels, root=data_file,
+                            fine_grained=fine_grained, train_subtrees=True, filter_pred=lambda ex: ex.label != 'neutral')
+    elif dataset == 'IMDB':
+        train, test = datasets.IMDB.splits(text_field=inputs, label_field=labels, root=data_file)
+        train, dev = train.split()
+    elif dataset == 'TREC':
+        train, dev, test = datasets.TREC.splits(text_field=inputs, label_field=labels, root=data_file,
+                                                fine_grained=fine_grained) # fine_graines einai oi 50 classes
+    elif dataset == 'SNLI':
+        train, dev, test = datasets.SNLI.splits(text_field=inputs, label_field=labels, root=data_file)
+    else:
+        print('Invalid dataset name detected...')
+        return
+
+
     print('Building vocabulary')
     inputs.build_vocab(train, dev, test)
     inputs.vocab.load_vectors(vectors=GloVe(name='840B', dim=300, cache=embeddings))
@@ -129,6 +143,8 @@ def main():
     parser.add_argument('--device', default=-1, help='Which device to run one; -1 for CPU', type=int)
     parser.add_argument('--data', default='resources', help='where to store data')
     parser.add_argument('--embeddings', default='.embeddings', help='where to store embeddings')
+    parser.add_argument('--dataset', default='IWSLT', choices={'IWSLT', 'SST', 'IMDB', 'TREC', 'SNLI'}, help='')
+    parser.add_argument('--fine_grained', default=False, help='')
 
     args = parser.parse_args()
     input_config = args.input
@@ -139,7 +155,7 @@ def main():
     config = load_config(os.path.join(MODEL_CNF_DIR, input_config))
     config["gpu"] = args.device
 
-    bcn(config, data_file, args.embeddings, args.device)
+    bcn(config, data_file, args.embeddings, args.device, args.dataset, args.fine_grained)
 
 
 if __name__ == '__main__':
