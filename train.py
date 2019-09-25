@@ -37,10 +37,11 @@ def bcn(config, data_file, embeddings, device, dataset, fine_grained):
                             fine_grained=fine_grained, train_subtrees=True, filter_pred=lambda ex: ex.label != 'neutral')
     elif dataset == 'IMDB':
         train, test = datasets.IMDB.splits(text_field=inputs, label_field=labels, root=data_file)
-        train, dev = train.split()
+        train, dev = train.split(split_ratio=0.9)  # 0.9 in order to be close to the paper
     elif dataset == 'TREC':
-        train, dev, test = datasets.TREC.splits(text_field=inputs, label_field=labels, root=data_file,
+        train, test = datasets.TREC.splits(text_field=inputs, label_field=labels, root=data_file,
                                                 fine_grained=fine_grained) # fine_graines einai oi 50 classes
+        train, dev = train.split()
     elif dataset == 'SNLI':
         train, dev, test = datasets.SNLI.splits(text_field=inputs, label_field=labels, root=data_file)
     else:
@@ -143,14 +144,14 @@ def main():
     parser.add_argument('--device', default=-1, help='Which device to run one; -1 for CPU', type=int)
     parser.add_argument('--data', default='resources', help='where to store data')
     parser.add_argument('--embeddings', default='.embeddings', help='where to store embeddings')
-    parser.add_argument('--dataset', default='IWSLT', choices={'IWSLT', 'SST', 'IMDB', 'TREC', 'SNLI'}, help='')
+    parser.add_argument('--dataset', default='IMDB', choices={'IWSLT', 'SST', 'IMDB', 'TREC', 'SNLI'}, help='')
     parser.add_argument('--fine_grained', default=False, help='')
 
     args = parser.parse_args()
     input_config = args.input
     data_file = args.data
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.device)
-    print("\nThis experiment runs on gpu {}...\n".format(str(args.device)))
+    print("\nThis experiment runs on {}...\n".format('GPU' if args.device == '0' else 'CPU'))
 
     config = load_config(os.path.join(MODEL_CNF_DIR, input_config))
     config["gpu"] = args.device
