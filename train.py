@@ -23,6 +23,7 @@ def bcn(config, data_file, embeddings, device, dataset):
     #   extensions : add 2 languages, use a combination of CoVe embeddings (like ELMo)
 
     name = "test_model"
+    torch.manual_seed(123)
 
     inputs = data.Field(lower=True, include_lengths=True, batch_first=True)
     labels = data.Field(sequential=False, unk_token=None)
@@ -41,8 +42,7 @@ def bcn(config, data_file, embeddings, device, dataset):
                                                fine_grained=True, train_subtrees=True)
     elif dataset == 'IMDB':
         train, test = datasets.IMDB.splits(text_field=inputs, label_field=labels, root=data_file)
-        train, dev = train.split(split_ratio=0.9, stratified=True,
-                                 random_state=123)  # 0.9 in order to be close to the paper
+        train, dev = train.split(split_ratio=0.9, stratified=True)  # 0.9 in order to be close to the paper
     elif dataset == 'TREC-6':
         train, test = datasets.TREC.splits(text_field=inputs, label_field=labels, root=data_file,
                                            fine_grained=False)
