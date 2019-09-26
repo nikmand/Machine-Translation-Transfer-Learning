@@ -19,7 +19,7 @@ from utils.general import number_h
 from utils.training import f1_macro, acc
 
 
-def bcn(config, data_file, embeddings, device, dataset, fine_grained):
+def bcn(config, data_file, embeddings, device, dataset):
     #   extensions : add 2 languages, use a combination of CoVe embeddings (like ELMo)
 
     name = "test_model"
@@ -32,22 +32,30 @@ def bcn(config, data_file, embeddings, device, dataset, fine_grained):
     if dataset == 'IWSLT':
         # using the IWSLT 2016 TED talk translation task
         train, dev, test = datasets.IWSLT.splits(root=data_file, exts=['.en', '.de'], fields=[inputs, inputs])
-    elif dataset == 'SST':
+    elif dataset == 'SST-2':
         train, dev, test = datasets.SST.splits(text_field=inputs, label_field=labels, root=data_file,
-                            fine_grained=fine_grained, train_subtrees=True, filter_pred=lambda ex: ex.label != 'neutral')
+                                               fine_grained=False, train_subtrees=True,
+                                               filter_pred=lambda ex: ex.label != 'neutral')
+    elif dataset == 'SST-5':
+        train, dev, test = datasets.SST.splits(text_field=inputs, label_field=labels, root=data_file,
+                                               fine_grained=True, train_subtrees=True)
     elif dataset == 'IMDB':
         train, test = datasets.IMDB.splits(text_field=inputs, label_field=labels, root=data_file)
-        train, dev = train.split(split_ratio=0.9)  # 0.9 in order to be close to the paper
-    elif dataset == 'TREC':
+        train, dev = train.split(split_ratio=0.9, stratified=True,
+                                 random_state=123)  # 0.9 in order to be close to the paper
+    elif dataset == 'TREC-6':
         train, test = datasets.TREC.splits(text_field=inputs, label_field=labels, root=data_file,
-                                                fine_grained=fine_grained) # fine_graines einai oi 50 classes
+                                           fine_grained=False)
+        train, dev = train.split()
+    elif dataset == 'TREC-50':
+        train, test = datasets.TREC.splits(text_field=inputs, label_field=labels, root=data_file,
+                                           fine_grained=True)
         train, dev = train.split()
     elif dataset == 'SNLI':
         train, dev, test = datasets.SNLI.splits(text_field=inputs, label_field=labels, root=data_file)
     else:
         print('Invalid dataset name detected...')
         return
-
 
     print('Building vocabulary')
     inputs.build_vocab(train, dev, test)
@@ -144,8 +152,9 @@ def main():
     parser.add_argument('--device', default=-1, help='Which device to run one; -1 for CPU', type=int)
     parser.add_argument('--data', default='resources', help='where to store data')
     parser.add_argument('--embeddings', default='.embeddings', help='where to store embeddings')
-    parser.add_argument('--dataset', default='IMDB', choices={'IWSLT', 'SST', 'IMDB', 'TREC', 'SNLI'}, help='')
-    parser.add_argument('--fine_grained', default=False, help='')
+    parser.add_argument('--dataset', default='IMDB',
+                        choices={'IWSLT', 'SST-2', 'SST-5', 'IMDB', 'TREC-6', 'TREC-50', 'SNLI'},
+                        help='')
 
     args = parser.parse_args()
     input_config = args.input
@@ -156,7 +165,7 @@ def main():
     config = load_config(os.path.join(MODEL_CNF_DIR, input_config))
     config["gpu"] = args.device
 
-    bcn(config, data_file, args.embeddings, args.device, args.dataset, args.fine_grained)
+    bcn(config, data_file, args.embeddings, args.device, args.dataset)
 
 
 if __name__ == '__main__':
