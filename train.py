@@ -46,7 +46,7 @@ def bcn(config, data_file, embeddings, device, dataset):
     elif dataset == 'TREC-6':
         train, test = datasets.TREC.splits(text_field=inputs, label_field=labels, root=data_file,
                                            fine_grained=False)
-        train, dev = train.split()
+        train, dev = train.split(split_ratio=0.9, stratified=True)
     elif dataset == 'TREC-50':
         train, test = datasets.TREC.splits(text_field=inputs, label_field=labels, root=data_file,
                                            fine_grained=True)
@@ -88,8 +88,8 @@ def bcn(config, data_file, embeddings, device, dataset):
     #####################################
     # Training Pipeline
     #####################################
-    trainer = BCNTrainer(model=model, train_loader=train_iter, valid_loader=dev_iter, criterion=criterion, device="cpu",
-                         config=config, optimizers=[optimizer])
+    trainer = BCNTrainer(model=model, train_loader=train_iter, valid_loader=dev_iter, criterion=criterion,
+                         device="cpu" if device == -1 else 'cuda', config=config, optimizers=[optimizer])
 
     print('Generating CoVe')
 
@@ -160,7 +160,7 @@ def main():
     input_config = args.input
     data_file = args.data
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.device)
-    print("\nThis experiment runs on {}...\n".format('GPU' if args.device == '0' else 'CPU'))
+    print("\nThis experiment runs on {}...\n".format('GPU' if args.device >= 0 else 'CPU'))
 
     config = load_config(os.path.join(MODEL_CNF_DIR, input_config))
     config["gpu"] = args.device

@@ -63,7 +63,7 @@ class BCNTrainer(Trainer):
                                        dtype=torch.from_numpy(item_array).dtype))
 
             else:
-                X = to_device(batch.text[0], device=self.device, dtype=batch.text[0])
+                X = to_device(batch.text[0], device=self.device, dtype=batch.text[0].dtype)
 
             y = to_device(batch.label, device=self.device, dtype=torch.long)
 
