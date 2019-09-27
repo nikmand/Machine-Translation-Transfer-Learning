@@ -160,10 +160,10 @@ def main():
     input_config = args.input
     data_file = args.data
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.device)
-    print("\nThis experiment runs on {}...\n".format('GPU' if args.device >= 0 else 'CPU'))
 
     config = load_config(os.path.join(MODEL_CNF_DIR, input_config))
-    config["gpu"] = args.device
+    config["device"] = 'cuda' if args.device >= 0 else 'cpu'
+    print("\nThis experiment runs on {}...\n".format(config["device"]))
 
     bcn(config, data_file, args.embeddings, args.device, args.dataset)
 

@@ -64,7 +64,7 @@ class BCN(nn.Module):
                               self.bilstm_integrator_size * 4 // 4 // 4, self.pool_size)
         self.classifier = nn.Linear((self.bilstm_integrator_size * 4) // 4 // 4, num_labels)
 
-        self.gpu = config['gpu']
+        self.device = config['device']
 
         self.w = nn.Parameter(torch.Tensor([[0.0], [0.0]]), requires_grad=True)
         self.gama = nn.Parameter(torch.Tensor([1.0]), requires_grad=True)
@@ -82,7 +82,7 @@ class BCN(nn.Module):
             trans_mask = mask.unsqueeze(2).expand(mask.size(0),
                                                   mask.size(1),
                                                   hidden_size)
-        if self.gpu != -1:
+        if self.device != 'cpu':
             return trans_mask.cuda()
         else:
             return trans_mask
@@ -117,11 +117,13 @@ class BCN(nn.Module):
         attention_logits = X.bmm(X.permute(0, 2, 1))
 
         # turn small values into very negative ones (-Inf) so that they can be zeroed during softmax
-        attention_mask1 = torch.Tensor((-1e32 * (attention_logits <= 1e-7).float()).detach())
+        attention_mask1 = torch.tensor((-1e32 * (attention_logits <= 1e-7).float()).detach(),
+                                       device=torch.device(self.device))
         masked_attention_logits = attention_logits + attention_mask1  # mask logits that are near zero
         masked_Ax = self.sm(masked_attention_logits)  # prerform column-wise softmax
         masked_Ay = self.sm(masked_attention_logits.permute(0, 2, 1))
-        attention_mask2 = torch.Tensor((attention_logits >= 1e-7).float().detach())  # mask those all zeros
+        attention_mask2 = torch.tensor((attention_logits >= 1e-7).float().detach(),
+                                       device=torch.device(self.device))  # mask those all zeros
         Ax = masked_Ax * attention_mask2
         Ay = masked_Ay * attention_mask2
 

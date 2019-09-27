@@ -29,9 +29,9 @@ def bcn(config, data_file, embeddings, device, chekpoint):
     # using the IWSLT 2016 TED talk translation task
     # train, dev, test = datasets.IWSLT.splits(root=data_file, exts=['.en', '.de'], fields=[inputs, inputs])
     # using SST
-    train, dev, test = datasets.SST.splits(text_field=inputs, label_field=labels, root=data_file, fine_grained=False,
-                                           train_subtrees=True,
-                                           filter_pred=lambda ex: ex.label != 'neutral')
+    train, dev, test = datasets.SST.splits(text_field=inputs, label_field=labels, root=data_file, fine_grained=True,
+                                           train_subtrees=True) #,
+                                           # filter_pred=lambda ex: ex.label != 'neutral')
     print('Building vocabulary')
     inputs.build_vocab(train, dev, test)
     inputs.vocab.load_vectors(vectors=GloVe(name='840B', dim=300, cache=embeddings))
@@ -87,19 +87,19 @@ def main():
     parser.add_argument("-i", "--input", required=False,
                         default='basic_model.yaml',
                         help="config file of input data")
-    parser.add_argument('--device', default=-1, help='Which device to run one; -1 for CPU', type=int)
+    parser.add_argument('--device', default=0, help='Which device to run one; -1 for CPU', type=int)
     parser.add_argument('--data', default='resources', help='where to store data')
     parser.add_argument('--embeddings', default='.embeddings', help='where to store embeddings')
-    parser.add_argument('--checkpoint', default='test_model_19-09-15_17:32:45')
+    parser.add_argument('--checkpoint', default='test_model_19-09-15_22:46:44')
 
     args = parser.parse_args()
     input_config = args.input
     data_file = args.data
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.device)
-    print("\nThis experiment runs on gpu {}...\n".format(str(args.device)))
 
     config = load_config(os.path.join(MODEL_CNF_DIR, input_config))
-    config["gpu"] = args.device
+    config["device"] = 'cuda' if args.device >= 0 else 'cpu'
+    print("\nThis experiment runs on {}...\n".format(config["device"]))
 
     bcn(config, data_file, args.embeddings, args.device, args.checkpoint)
 
