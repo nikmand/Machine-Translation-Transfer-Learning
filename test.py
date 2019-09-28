@@ -19,19 +19,40 @@ from utils.general import number_h
 from utils.training import f1_macro, acc, load_checkpoint
 
 
-def bcn(config, data_file, embeddings, device, chekpoint):
+def bcn(config, data_file, embeddings, device, chekpoint, dataset, embeddings_type):
     #   extensions : add 2 languages, use a combination of CoVe embeddings (like ELMo)
 
     inputs = data.Field(lower=True, include_lengths=True, batch_first=True)
     labels = data.Field(sequential=False, unk_token=None)
 
     print('Generating train, dev, test splits')
-    # using the IWSLT 2016 TED talk translation task
-    # train, dev, test = datasets.IWSLT.splits(root=data_file, exts=['.en', '.de'], fields=[inputs, inputs])
-    # using SST
-    train, dev, test = datasets.SST.splits(text_field=inputs, label_field=labels, root=data_file, fine_grained=True,
-                                           train_subtrees=True) #,
-                                           # filter_pred=lambda ex: ex.label != 'neutral')
+    if dataset == 'IWSLT':
+        # using the IWSLT 2016 TED talk translation task
+        train, dev, test = datasets.IWSLT.splits(root=data_file, exts=['.en', '.de'], fields=[inputs, inputs])
+    elif dataset == 'SST-2':
+        train, dev, test = datasets.SST.splits(text_field=inputs, label_field=labels, root=data_file,
+                                               fine_grained=False, train_subtrees=True,
+                                               filter_pred=lambda ex: ex.label != 'neutral')
+    elif dataset == 'SST-5':
+        train, dev, test = datasets.SST.splits(text_field=inputs, label_field=labels, root=data_file,
+                                               fine_grained=True, train_subtrees=True)
+    elif dataset == 'IMDB':
+        train, test = datasets.IMDB.splits(text_field=inputs, label_field=labels, root=data_file)
+        train, dev = train.split(split_ratio=0.9, stratified=True)  # 0.9 in order to be close to the paper
+    elif dataset == 'TREC-6':
+        train, test = datasets.TREC.splits(text_field=inputs, label_field=labels, root=data_file,
+                                           fine_grained=False)
+        train, dev = train.split(split_ratio=0.9, stratified=True)
+    elif dataset == 'TREC-50':
+        train, test = datasets.TREC.splits(text_field=inputs, label_field=labels, root=data_file,
+                                           fine_grained=True)
+        train, dev = train.split()
+    elif dataset == 'SNLI':
+        train, dev, test = datasets.SNLI.splits(text_field=inputs, label_field=labels, root=data_file)
+    else:
+        print('Invalid dataset name detected...')
+        return
+
     print('Building vocabulary')
     inputs.build_vocab(train, dev, test)
     inputs.vocab.load_vectors(vectors=GloVe(name='840B', dim=300, cache=embeddings))
@@ -43,7 +64,7 @@ def bcn(config, data_file, embeddings, device, chekpoint):
         sort_within_batch=True)
 
     model = BCN(config=config, n_vocab=len(inputs.vocab), vocabulary=inputs.vocab.vectors, embeddings=embeddings,
-                num_labels=len(labels.vocab.freqs))
+                num_labels=len(labels.vocab.freqs), embeddings_type=embeddings_type)
 
     bcn_params = [p for n, p in model.named_parameters() if "mtlstm" not in n and p.requires_grad]
 
@@ -63,7 +84,8 @@ def bcn(config, data_file, embeddings, device, chekpoint):
     #####################################
     # Training Pipeline
     #####################################
-    trainer = BCNTrainer(model=model, train_loader=None, valid_loader=dev_iter, criterion=criterion, device="cpu",
+    trainer = BCNTrainer(model=model, train_loader=None, valid_loader=test_iter, criterion=criterion,
+                         device="cpu" if device == -1 else 'cuda',
                          config=config, optimizers=[optimizer])
 
     state = load_checkpoint(chekpoint)
@@ -87,10 +109,16 @@ def main():
     parser.add_argument("-i", "--input", required=False,
                         default='basic_model.yaml',
                         help="config file of input data")
-    parser.add_argument('--device', default=0, help='Which device to run one; -1 for CPU', type=int)
+    parser.add_argument('--device', default=0, help='Which device to run one; 0 for CPU', type=int)
     parser.add_argument('--data', default='resources', help='where to store data')
     parser.add_argument('--embeddings', default='.embeddings', help='where to store embeddings')
-    parser.add_argument('--checkpoint', default='test_model_19-09-15_22:46:44')
+    parser.add_argument('--dataset', default='TREC-6',
+                        choices={'IWSLT', 'SST-2', 'SST-5', 'IMDB', 'TREC-6', 'TREC-50', 'SNLI'},
+                        help='')
+    parser.add_argument('--embeddings_type', default='all',
+                        choices={'glove', 'cove_1', 'cove_2', 'all', 'decove'},
+                        help='variation of embeddings to be used')
+    parser.add_argument('--checkpoint', default='CoVex2_TREC-6')
 
     args = parser.parse_args()
     input_config = args.input
@@ -101,8 +129,7 @@ def main():
     config["device"] = 'cuda' if args.device >= 0 else 'cpu'
     print("\nThis experiment runs on {}...\n".format(config["device"]))
 
-    bcn(config, data_file, args.embeddings, args.device, args.checkpoint)
-
+    bcn(config, data_file, args.embeddings, args.device, args.checkpoint, args.dataset, args.embeddings_type)
 
 if __name__ == '__main__':
     main()

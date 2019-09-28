@@ -20,7 +20,7 @@ class BCN(nn.Module):
     def __init__(self, config, n_vocab, vocabulary, embeddings, num_labels, embeddings_type):
         super(BCN, self).__init__()
         self.word_vec_size = config['word_vec_size']
-        self.mtlstm_hidden_size =  mtlstm_hidden_size[embeddings_type] # config['mtlstm_hidden_size']
+        self.mtlstm_hidden_size = mtlstm_hidden_size[embeddings_type]  # config['mtlstm_hidden_size']
         self.cove_size = self.word_vec_size + self.mtlstm_hidden_size
         self.fc_hidden_size = config['fc_hidden_size']
         self.bilstm_encoder_size = config['bilstm_encoder_size']
@@ -91,7 +91,7 @@ class BCN(nn.Module):
 
     def forward(self, tokens_emb, length):
 
-        reps = self.mtlstm(tokens_emb, length) # size 1500
+        reps = self.mtlstm(tokens_emb, length)  # size 1500
 
         glove = reps[:, :, :300]
         cove_1 = reps[:, :, 300:900]
@@ -107,9 +107,9 @@ class BCN(nn.Module):
             s = torch.cat([cove_1.unsqueeze(-1), cove_2.unsqueeze(-1)], 3).detach()
             softmax_weghts = torch.softmax(self.w, dim=0)
             weighted_reps = s.matmul(softmax_weghts).squeeze(-1) * self.gama
-            reps = torch.cat([glove, weighted_reps], dim=2) # size 300 + 600
+            reps = torch.cat([glove, weighted_reps], dim=2)  # size 300 + 600
 
-        print("REPS {}".format(reps.shape))
+        # print("REPS {}".format(reps.shape))
         reps = self.dropout(reps)
 
         task_specific_reps = (self.relu(self.fc(reps)))
