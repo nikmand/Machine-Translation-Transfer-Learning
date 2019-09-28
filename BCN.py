@@ -3,6 +3,7 @@ import torch.nn as nn
 from MaxOut import Maxout
 from torch.nn.utils.rnn import pad_packed_sequence as unpack
 from torch.nn.utils.rnn import pack_padded_sequence as pack
+from Constants import mtlstm_hidden_size
 
 from encoder import MTLSTM
 
@@ -16,18 +17,19 @@ class BCN(nn.Module):
     #  include 2 sentences case,
     #  review masks + parameters
 
-    def __init__(self, config, n_vocab, vocabulary, embeddings, num_labels):
+    def __init__(self, config, n_vocab, vocabulary, embeddings, num_labels, embeddings_type):
         super(BCN, self).__init__()
         self.word_vec_size = config['word_vec_size']
-        self.mtlstm_hidden_size = config['mtlstm_hidden_size']
+        self.mtlstm_hidden_size =  mtlstm_hidden_size[embeddings_type] # config['mtlstm_hidden_size']
         self.cove_size = self.word_vec_size + self.mtlstm_hidden_size
         self.fc_hidden_size = config['fc_hidden_size']
         self.bilstm_encoder_size = config['bilstm_encoder_size']
         self.bilstm_integrator_size = config['bilstm_integrator_size']
-        self.decove = config["deep_vectors"]
+        self.embeddings_type = embeddings_type
+        # self.decove = config["deep_vectors"]
 
         self.mtlstm = MTLSTM(n_vocab=n_vocab, vectors=vocabulary, residual_embeddings=True, model_cache=embeddings,
-                             layer0=self.decove, layer1=True)
+                             layer0=True, layer1=True)
 
         self.fc = nn.Linear(self.cove_size, self.fc_hidden_size)
 
@@ -89,17 +91,25 @@ class BCN(nn.Module):
 
     def forward(self, tokens_emb, length):
 
-        reps = self.mtlstm(tokens_emb, length)
-        if self.decove:
-            glove = reps[:, :, :300]
-            cove_1 = reps[:, :, 300:900]
-            cove_2 = reps[:, :, 900:]
+        reps = self.mtlstm(tokens_emb, length) # size 1500
 
+        glove = reps[:, :, :300]
+        cove_1 = reps[:, :, 300:900]
+        cove_2 = reps[:, :, 900:]
+
+        if self.embeddings_type == 'glove':
+            reps = glove
+        elif self.embeddings_type == 'cove_1':
+            reps = torch.cat([glove, cove_1], dim=2)
+        elif self.embeddings_type == 'cove_2':
+            reps = torch.cat([glove, cove_2], dim=2)
+        elif self.embeddings_type == 'decove':
             s = torch.cat([cove_1.unsqueeze(-1), cove_2.unsqueeze(-1)], 3).detach()
             softmax_weghts = torch.softmax(self.w, dim=0)
             weighted_reps = s.matmul(softmax_weghts).squeeze(-1) * self.gama
-            reps = torch.cat([glove, weighted_reps], dim=2)
+            reps = torch.cat([glove, weighted_reps], dim=2) # size 300 + 600
 
+        print("REPS {}".format(reps.shape))
         reps = self.dropout(reps)
 
         task_specific_reps = (self.relu(self.fc(reps)))

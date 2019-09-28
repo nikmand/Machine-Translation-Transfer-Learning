@@ -13,13 +13,12 @@ from torchtext.vocab import GloVe
 import torch.nn as nn
 import torch
 
-from encoder import MTLSTM
 from utils.earlystopping import EarlyStopping
 from utils.general import number_h
 from utils.training import f1_macro, acc
 
 
-def bcn(config, data_file, embeddings, device, dataset):
+def bcn(config, data_file, embeddings, device, dataset, embeddings_type):
     #   extensions : add 2 languages, use a combination of CoVe embeddings (like ELMo)
 
     name = "test_model"
@@ -68,7 +67,7 @@ def bcn(config, data_file, embeddings, device, dataset):
         sort_within_batch=True)
 
     model = BCN(config=config, n_vocab=len(inputs.vocab), vocabulary=inputs.vocab.vectors, embeddings=embeddings,
-                num_labels=len(labels.vocab.freqs))
+                num_labels=len(labels.vocab.freqs), embeddings_type=embeddings_type)
 
     bcn_params = [p for n, p in model.named_parameters() if "mtlstm" not in n and p.requires_grad]
 
@@ -152,9 +151,12 @@ def main():
     parser.add_argument('--device', default=-1, help='Which device to run one; -1 for CPU', type=int)
     parser.add_argument('--data', default='resources', help='where to store data')
     parser.add_argument('--embeddings', default='.embeddings', help='where to store embeddings')
+    parser.add_argument('--embeddings_type', default='decove',
+                        choices={'glove', 'cove_1', 'cove_2', 'all', 'decove'},
+                        help='variation of embeddings to be used')
     parser.add_argument('--dataset', default='IMDB',
                         choices={'IWSLT', 'SST-2', 'SST-5', 'IMDB', 'TREC-6', 'TREC-50', 'SNLI'},
-                        help='')
+                        help='dataset to be used')
 
     args = parser.parse_args()
     input_config = args.input
@@ -165,7 +167,7 @@ def main():
     config["device"] = 'cuda' if args.device >= 0 else 'cpu'
     print("\nThis experiment runs on {}...\n".format(config["device"]))
 
-    bcn(config, data_file, args.embeddings, args.device, args.dataset)
+    bcn(config, data_file, args.embeddings, args.device, args.dataset, args.embeddings_type)
 
 
 if __name__ == '__main__':
