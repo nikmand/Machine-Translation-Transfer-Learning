@@ -4,7 +4,6 @@ fc_hidden_size: 300
 bilstm_encoder_size: 600
 bilstm_integrator_size: 600
 maxout_channels: 4
-deep_vectors: True
 
 dropout: 0.3
 patience: 5

@@ -26,7 +26,6 @@ class BCN(nn.Module):
         self.bilstm_encoder_size = config['bilstm_encoder_size']
         self.bilstm_integrator_size = config['bilstm_integrator_size']
         self.embeddings_type = embeddings_type
-        # self.decove = config["deep_vectors"]
 
         self.mtlstm = MTLSTM(n_vocab=n_vocab, vectors=vocabulary, residual_embeddings=True, model_cache=embeddings,
                              layer0=True, layer1=True)
